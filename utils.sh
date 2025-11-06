@@ -311,15 +311,23 @@ apk_mirror_search() {
 	return 1
 }
 dl_apkmirror() {
-	local url=$1 version=${2// /-} output=$3 arch=$4 dpi=$5 is_bundle=false
+    local url=$1 version=${2// /-} output=$3 arch=$4 dpi=$5 is_bundle=false
 	if [ -f "${output}.apkm" ]; then
 		is_bundle=true
 	else
 		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
-		local resp node app_table apkmname dlurl=""
-		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
-		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
-		url="${url}/${apkmname}-${version//./-}-release/"
+        local resp node app_table apkmname dlurl="" vlink vslug
+        # Résoudre dynamiquement la page de version car le slug peut changer (ex: soundcloud-play-music-songs)
+        vslug="${version//./-}-release"
+        vlink=$($HTMLQ --base https://www.apkmirror.com --attribute href "a[href*='/${vslug}/']" <<<"$__APKMIRROR_RESP__" | head -1)
+        if [ -n "$vlink" ]; then
+            url="$vlink"
+        else
+            # Repli: utiliser l'ancien calcul à partir du titre si aucun lien direct trouvé
+            apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
+            apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
+            url="${url}/${apkmname}-${version//./-}-release/"
+        fi
 		resp=$(req "$url" -) || return 1
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
 		if [ "$node" ]; then
