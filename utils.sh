@@ -316,10 +316,32 @@ dl_apkmirror() {
 		is_bundle=true
 	else
 		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
-        local resp node app_table apkmname dlurl="" vlink vslug
-        # Résoudre dynamiquement la page de version car le slug peut changer (ex: soundcloud-play-music-songs)
+        local resp node app_table apkmname dlurl="" vlink vslug version_pattern all_links
+        # Normaliser la version pour la recherche (2025.05.27-release -> 2025-05-27-release)
         vslug="${version//./-}-release"
-        vlink=$($HTMLQ --base https://www.apkmirror.com --attribute href "a[href*='/${vslug}/']" <<<"$__APKMIRROR_RESP__" | head -1)
+        # Chercher tous les liens de version dans la page et trouver celui qui correspond
+        # Format attendu: .../app-slug-2025-05-27-release-release/ ou .../app-slug-2025-05-27-release/
+        version_pattern="${vslug}"
+        # Extraire tous les liens de la page (dans la section ALL VERSIONS)
+        all_links=$($HTMLQ --base https://www.apkmirror.com --attribute href "a" <<<"$__APKMIRROR_RESP__" 2>/dev/null || true)
+        if [ -n "$all_links" ]; then
+            # Filtrer pour trouver le lien qui contient la version normalisée et se termine par / ou -release/
+            # Format: .../app-slug-2025-05-27-release-release/ ou .../app-slug-2025-05-27-release/
+            vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}(-release)?/$" | head -1)
+        fi
+        if [ -z "$vlink" ]; then
+            # Essayer aussi avec le format avec double -release (ex: soundcloud-play-music-songs-2025-05-27-release-release/)
+            if [ -n "$all_links" ]; then
+                vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}-release/$" | head -1)
+            fi
+        fi
+        if [ -z "$vlink" ]; then
+            # Essayer avec le sélecteur CSS spécifique
+            all_links=$($HTMLQ --base https://www.apkmirror.com --attribute href "a[href*='/${version_pattern}']" <<<"$__APKMIRROR_RESP__" 2>/dev/null || true)
+            if [ -n "$all_links" ]; then
+                vlink=$(echo "$all_links" | grep -E "/${version_pattern}(-release)?/$" | head -1)
+            fi
+        fi
         if [ -n "$vlink" ]; then
             url="$vlink"
         else
