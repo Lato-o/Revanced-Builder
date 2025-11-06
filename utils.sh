@@ -325,25 +325,37 @@ dl_apkmirror() {
         # Extraire tous les liens de la page (dans la section ALL VERSIONS)
         all_links=$($HTMLQ --base https://www.apkmirror.com --attribute href "a" <<<"$__APKMIRROR_RESP__" 2>/dev/null || true)
         if [ -n "$all_links" ]; then
-            # Filtrer pour trouver le lien qui contient la version normalisée et se termine par / ou -release/
+            # Filtrer pour trouver le lien qui contient la version normalisée
             # Format: .../app-slug-2025-05-27-release-release/ ou .../app-slug-2025-05-27-release/
-            vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}(-release)?/$" | head -1)
-        fi
-        if [ -z "$vlink" ]; then
-            # Essayer aussi avec le format avec double -release (ex: soundcloud-play-music-songs-2025-05-27-release-release/)
-            if [ -n "$all_links" ]; then
-                vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}-release/$" | head -1)
+            # Chercher d'abord avec le format double -release (ex: soundcloud-play-music-songs-2025-05-27-release-release/)
+            vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}-release/$" | head -1)
+            # Si pas trouvé, essayer avec un seul -release
+            if [ -z "$vlink" ]; then
+                vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}/$" | head -1)
+            fi
+            # Si toujours pas trouvé, chercher n'importe où dans l'URL (pour les liens relatifs)
+            if [ -z "$vlink" ]; then
+                vlink=$(echo "$all_links" | grep -E "${version_pattern}(-release)?/" | grep -E "^/" | head -1)
             fi
         fi
         if [ -z "$vlink" ]; then
-            # Essayer avec le sélecteur CSS spécifique
-            all_links=$($HTMLQ --base https://www.apkmirror.com --attribute href "a[href*='/${version_pattern}']" <<<"$__APKMIRROR_RESP__" 2>/dev/null || true)
+            # Essayer avec le sélecteur CSS spécifique pour les liens contenant la version
+            all_links=$($HTMLQ --base https://www.apkmirror.com --attribute href "a[href*='${version_pattern}']" <<<"$__APKMIRROR_RESP__" 2>/dev/null || true)
             if [ -n "$all_links" ]; then
-                vlink=$(echo "$all_links" | grep -E "/${version_pattern}(-release)?/$" | head -1)
+                # Chercher le format double -release d'abord
+                vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}-release/$" | head -1)
+                if [ -z "$vlink" ]; then
+                    vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}/$" | head -1)
+                fi
             fi
         fi
         if [ -n "$vlink" ]; then
-            url="$vlink"
+            # S'assurer que le lien est absolu
+            if [[ "$vlink" =~ ^/ ]]; then
+                url="https://www.apkmirror.com$vlink"
+            else
+                url="$vlink"
+            fi
         else
             # Repli: utiliser l'ancien calcul à partir du titre si aucun lien direct trouvé
             apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
