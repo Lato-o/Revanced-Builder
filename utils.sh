@@ -351,9 +351,17 @@ dl_apkmirror() {
         fi
         if [ -z "$vlink" ]; then
             # Rechercher aussi dans la page "All Versions" d'APKMirror
-            local apkm_uploads
-            apkm_uploads=$(req "https://www.apkmirror.com/uploads/?appcategory=${__APKMIRROR_CAT__}" - 2>/dev/null || true)
-            if [ -n "$apkm_uploads" ]; then
+            # Parcourir plusieurs pages jusqu'à trouver la version (max 10 pages)
+            local apkm_uploads page_num
+            for page_num in {1..10}; do
+                if [ "$page_num" = 1 ]; then
+                    apkm_uploads=$(req "https://www.apkmirror.com/uploads/?appcategory=${__APKMIRROR_CAT__}" - 2>/dev/null || true)
+                else
+                    apkm_uploads=$(req "https://www.apkmirror.com/uploads/page/${page_num}/?appcategory=${__APKMIRROR_CAT__}" - 2>/dev/null || true)
+                fi
+                if [ -z "$apkm_uploads" ]; then
+                    break
+                fi
                 all_links=$($HTMLQ --base https://www.apkmirror.com --attribute href "a" <<<"$apkm_uploads" 2>/dev/null || true)
                 if [ -n "$all_links" ]; then
                     # Chercher le format double -release d'abord, sinon simple -release
@@ -361,8 +369,11 @@ dl_apkmirror() {
                     if [ -z "$vlink" ]; then
                         vlink=$(echo "$all_links" | grep -E "/[^/]*-${version_pattern}/$" | head -1)
                     fi
+                    if [ -n "$vlink" ]; then
+                        break
+                    fi
                 fi
-            fi
+            done
         fi
         if [ -n "$vlink" ]; then
             # S'assurer que le lien est absolu
